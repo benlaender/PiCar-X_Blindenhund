@@ -28,7 +28,7 @@ distance = 0
 # Define flags for thread control
 running = True  # Controls the execution of the main loop
 qr_code_flag = True  # Controls the execution of the QR code detection
-movement_allowed = True  # Allows controlling the movement separately
+movement_allowed = False  # Allows controlling the movement separately
 
 # --------------- Threading ------------ #
 def key_listener():
@@ -269,7 +269,7 @@ def main():
 
     try:
         #px = Picarx(ultrasonic_pins=['D2','D3']) # tring, echo
-       
+        print("Please press 'c' to enter the searched Code." )
         safe_detect = 0
         danger_detect = 0
         while True:
@@ -302,6 +302,8 @@ def main():
         running = False
         qr_code_flag = False
         key_thread.join()
+        qr_thread.join()
+        print("Stoppped and exiting.")
     Vilib.camera_close()
 
 main()
