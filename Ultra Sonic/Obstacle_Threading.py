@@ -21,6 +21,8 @@ distance_right = 0
 choose = Right
 distance = 0
 
+
+
 running = True
 movement_allowed = True
 
@@ -40,37 +42,12 @@ def key_listener():
             running = False  # Set running to False to end all threads and stop the program
             print("Quitting program...")
 
-def main():
-    key_thread = threading.Thread(target=key_listener)
-
-    key_thread.start()
-
-    try:
-        #px = Picarx(ultrasonic_pins=['D2','D3']) # tring, echo
-       
-        while True:
-            if movement_allowed:
-                distance = round(px.ultrasonic.read(), 2)
-                #print("distance: ",distance)
-                if distance >= Safe:
-                    px.set_dir_servo_angle(Straight)
-                    px.forward(Power)
-                elif distance >= Danger:
-                    choose = Measuring()
-                    #print (choose)
-                    Bypass()
-                    px.forward(0)
-                else:
-                    uturn() #U-Turn statt einfachem Rückwärtsfahren
-
-    finally:
-        px.forward(0) #Hält die Räder am Ende an
-
 def uturn():
     choose = Measuring() #Notwendig, da ansonsten choose wieder auf den Startwert zurückgesetzt wird
     #print(choose)
     for i in range(5): #Bestimmt wie oft er justiert 5 mal mit Distance = 0.85 => 180° Drehung
-        uturn_move(choose)
+        if movement_allowed:
+            uturn_move(choose)
     print("Uturn done.")
 
 def uturn_move(Turn): #Justieren um sich neu auszurichten
@@ -117,16 +94,53 @@ def Bypass():
     px.set_dir_servo_angle(choose)
 
     while(distance <= Safe*1.2):
-        if distance < 0.7*Danger:
-            break
-        px.forward(Power)
-        time.sleep(0.5)
-        px.set_dir_servo_angle(Straight)
-        px.forward(Power)
-        time.sleep(0.3)
-        px.set_dir_servo_angle(choose)
-        distance = round(px.ultrasonic.read(), 2)
+        if movement_allowed:
+            if distance < 0.7*Danger:
+                break
+            px.forward(Power)
+            time.sleep(0.5)
+            px.set_dir_servo_angle(Straight)
+            px.forward(Power)
+            time.sleep(0.3)
+            px.set_dir_servo_angle(choose)
+            distance = round(px.ultrasonic.read(), 2)
 
     print("Driven around the obstacle")
+
+def main():
+    key_thread = threading.Thread(target=key_listener)
+
+    key_thread.start()
+
+    try:
+        #px = Picarx(ultrasonic_pins=['D2','D3']) # tring, echo
+       
+        safe_detect = 0
+        danger_detect = 0
+        while True:
+            if movement_allowed:
+                distance = round(px.ultrasonic.read(), 2)
+                #print("distance: ",distance)
+                if distance >= Safe:
+                    px.set_dir_servo_angle(Straight)
+                    px.forward(Power)
+                elif distance >= Danger:
+                    safe_detect +=1
+                    if safe_detect >= 3:
+                        choose = Measuring()
+                        #print (choose)
+                        Bypass()
+                        px.forward(0)
+                        safe_detect = 0
+                else:
+                    danger_detect +=1
+                    if danger_detect >= 3:
+                        uturn() #U-Turn statt einfachem Rückwärtsfahren
+                        danger_detect = 0
+            else:
+                px.forward(0)
+
+    finally:
+        px.forward(0) #Hält die Räder am Ende an
 
 main()

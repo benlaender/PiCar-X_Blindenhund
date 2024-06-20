@@ -30,6 +30,50 @@ running = True  # Controls the execution of the main loop
 qr_code_flag = True  # Controls the execution of the QR code detection
 movement_allowed = True  # Allows controlling the movement separately
 
+# --------------- Threading ------------ #
+def key_listener():
+    global running, movement_allowed, specific_qr_value 
+    print("Press 'p' to pause/start the robot, 'q' to quit.")
+    while running:
+        key = readchar.readkey()
+        if key == 'p':
+            movement_allowed = not movement_allowed  # Toggle movement allowed
+            if movement_allowed:
+                print("Resuming operation...")
+            else:
+                print("Pausing operation...")
+                px.stop()  # Make sure to stop the robot when pausing 
+        elif key == 'c':
+           # Pause operation before changing QR code
+            movement_allowed = False
+            px.stop()
+            
+            print("Operation paused for QR code change.")
+            
+            # Change QR code value
+            while True:
+                new_qr_value = input("Enter the new QR code value (or 'cancel' to resume without changing): ")
+                if new_qr_value.lower() == 'cancel':
+                    print("QR code change cancelled. Resuming operation.")
+                    break
+                if new_qr_value.strip() == '':
+                    print("Invalid input, please enter a valid QR code value.")
+                    continue
+                confirm = input(f"Change to this QR code '{new_qr_value}'? (yes/no): ")
+                if confirm.lower() == 'yes':
+                    specific_qr_value = clean_qr_text(new_qr_value)
+                    print(f"QR code value changed to: {specific_qr_value}. Resuming operation.")
+                    break
+                else:
+                    print("Change cancelled. Please enter the QR code value again or type 'cancel' to resume.")
+            
+            # Resume operation
+            movement_allowed = True     
+        elif key == 'q':
+            running = False  # Set running to False to end all threads and stop the program
+            movement_allowed = False
+            print("Quitting program...")
+
 # --------------- QR-Code -------------- #
 
 def clean_qr_text(text):
@@ -87,50 +131,8 @@ def qrcode_detect():
                     Vilib.qrcode_detect_switch(True)  # Resume QR code detection
                     movement_allowed = True
         sleep(0.1)
+    px.forward(0)
     Vilib.qrcode_detect_switch(False)
-
-# --------------- Threading ------------ #
-def key_listener():
-    global running, movement_allowed, specific_qr_value 
-    print("Press 'p' to pause/start the robot, 'q' to quit.")
-    while running:
-        key = readchar.readkey()
-        if key == 'p':
-            movement_allowed = not movement_allowed  # Toggle movement allowed
-            if movement_allowed:
-                print("Resuming operation...")
-            else:
-                print("Pausing operation...")
-                px.stop()  # Make sure to stop the robot when pausing 
-        elif key == 'c':
-           # Pause operation before changing QR code
-            movement_allowed = False
-            px.stop()
-            
-            print("Operation paused for QR code change.")
-            
-            # Change QR code value
-            while True:
-                new_qr_value = input("Enter the new QR code value (or 'cancel' to resume without changing): ")
-                if new_qr_value.lower() == 'cancel':
-                    print("QR code change cancelled. Resuming operation.")
-                    break
-                if new_qr_value.strip() == '':
-                    print("Invalid input, please enter a valid QR code value.")
-                    continue
-                confirm = input(f"Change to this QR code '{new_qr_value}'? (yes/no): ")
-                if confirm.lower() == 'yes':
-                    specific_qr_value = clean_qr_text(new_qr_value)
-                    print(f"QR code value changed to: {specific_qr_value}. Resuming operation.")
-                    break
-                else:
-                    print("Change cancelled. Please enter the QR code value again or type 'cancel' to resume.")
-            
-            # Resume operation
-            movement_allowed = True     
-        elif key == 'q':
-            running = False  # Set running to False to end all threads and stop the program
-            print("Quitting program...")
 
 def qrcode_detect():
     global qr_code_flag, running, movement_allowed, specific_qr_value
@@ -189,47 +191,14 @@ def change_qr_code():
         else:
             print("Change cancelled, no new QR code value set.")
 
-# --------------- Movement ------------- #
-def main():
-    Vilib.camera_start()
-    key_thread = threading.Thread(target=key_listener)
-    qr_thread = threading.Thread(target=qrcode_detect)
-
-    key_thread.start()
-    qr_thread.start()
-
-    try:
-        #px = Picarx(ultrasonic_pins=['D2','D3']) # tring, echo
-       
-        while True:
-            if movement_allowed:
-                distance = round(px.ultrasonic.read(), 2)
-                #print("distance: ",distance)
-                if distance >= Safe:
-                    px.set_dir_servo_angle(Straight)
-                    px.forward(Power)
-                elif distance >= Danger:
-                    choose = Measuring()
-                    #print (choose)
-                    Bypass()
-                    px.forward(0)
-                else:
-                    uturn() #U-Turn statt einfachem Rückwärtsfahren
-
-    finally:
-        px.forward(0) #Hält die Räder am Ende an
-        running = False
-        qr_code_flag = False
-        key_thread.join()
-    Vilib.camera_close()
-
 # -------------- Ultrasonic-Driving -------------- #
 
 def uturn():
     choose = Measuring() #Notwendig, da ansonsten choose wieder auf den Startwert zurückgesetzt wird
     #print(choose)
     for i in range(5): #Bestimmt wie oft er justiert 5 mal mit Distance = 0.85 => 180° Drehung
-        uturn_move(choose)
+        if movement_allowed:
+            uturn_move(choose)
     print("Uturn done.")
 
 def uturn_move(Turn): #Justieren um sich neu auszurichten
@@ -276,16 +245,63 @@ def Bypass():
     px.set_dir_servo_angle(choose)
 
     while(distance <= Safe*1.2):
-        if distance < 0.7*Danger:
-            break
-        px.forward(Power)
-        time.sleep(0.5)
-        px.set_dir_servo_angle(Straight)
-        px.forward(Power)
-        time.sleep(0.3)
-        px.set_dir_servo_angle(choose)
-        distance = round(px.ultrasonic.read(), 2)
+        if movement_allowed:
+            if distance < 0.7*Danger:
+                break
+            px.forward(Power)
+            time.sleep(0.5)
+            px.set_dir_servo_angle(Straight)
+            px.forward(Power)
+            time.sleep(0.3)
+            px.set_dir_servo_angle(choose)
+            distance = round(px.ultrasonic.read(), 2)
 
     print("Driven around the obstacle")
+
+# --------------- Movement ------------- #
+def main():
+    Vilib.camera_start()
+    key_thread = threading.Thread(target=key_listener)
+    qr_thread = threading.Thread(target=qrcode_detect)
+
+    key_thread.start()
+    qr_thread.start()
+
+    try:
+        #px = Picarx(ultrasonic_pins=['D2','D3']) # tring, echo
+       
+        safe_detect = 0
+        danger_detect = 0
+        while True:
+            if movement_allowed:
+                distance = round(px.ultrasonic.read(), 2)
+                #print("distance: ",distance)
+                if distance >= Safe:
+                    px.set_dir_servo_angle(Straight)
+                    px.forward(Power)
+                elif distance >= Danger:
+                    safe_detect +=1
+                    print(f"safe_detect = {safe_detect}")
+                    if safe_detect >= 3:
+                        choose = Measuring()
+                        #print (choose)
+                        Bypass()
+                        px.forward(0)
+                        safe_detect = 0
+                else:
+                    danger_detect +=1
+                    print(f"danger_detect = {danger_detect}")
+                    if danger_detect >= 3:
+                        uturn() #U-Turn statt einfachem Rückwärtsfahren
+                        danger_detect = 0
+            else:
+                px.forward(0)
+
+    finally:
+        px.forward(0) #Hält die Räder am Ende an
+        running = False
+        qr_code_flag = False
+        key_thread.join()
+    Vilib.camera_close()
 
 main()
